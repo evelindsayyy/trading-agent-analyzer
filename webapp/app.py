@@ -18,9 +18,10 @@ if str(_REPO_ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from webapp import cheatsheet, config, job_manager, report_store, storage  # noqa: E402
+from webapp import cheatsheet, cjk, config, job_manager, report_store, storage  # noqa: E402
 
 st.set_page_config(page_title="AI 股票分析助手", page_icon="📈", layout="wide")
+cjk.inject_fonts(st)  # consistent CJK font stack across the whole app
 try:
     storage.init()  # ensure dirs + (when DATABASE_URL is set) the runs table
 except Exception as exc:  # noqa: BLE001 — show a friendly message, not a stack trace
@@ -259,7 +260,7 @@ def page_report() -> None:
         picked = st.radio("章节", labels, horizontal=True)
         for _, label, content in sections:
             if label == picked:
-                st.markdown(content)
+                st.markdown(cjk.clean_markdown(content))
 
     with tab_cheat:
         _cheatsheet_ui(run)
@@ -285,7 +286,7 @@ def _cheatsheet_ui(run: report_store.Run) -> None:
 
     md = st.session_state.get(f"cheat_{run.name}_{lang}") or existing
     if md:
-        st.markdown(md)
+        st.markdown(cjk.clean_markdown(md))
         fname = "beginner_cheatsheet_zh.md" if lang == "zh" else "beginner_cheatsheet.md"
         st.download_button("⬇️ 下载 Markdown", md, file_name=fname)
     else:
