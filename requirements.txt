@@ -1,8 +1,3 @@
-# Web app dependency.
+# Installs the tradingagents package (via pyproject) + the web app dep.
+.
 streamlit>=1.40
-
-# This app imports the `tradingagents` package, which is a separate
-# (open-source, locally-modified) project — install it editable into the SAME
-# Python environment, e.g.:
-#     uv pip install -e /path/to/TradingAgents
-# It is intentionally NOT pinned here because it is not published to PyPI.
