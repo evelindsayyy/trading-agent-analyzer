@@ -48,6 +48,8 @@ def check_password() -> bool:
             st.rerun()
         else:
             st.error("口令错误，请重试。")
+    st.divider()
+    st.caption(config.DISCLAIMER)
     return False
 
 
@@ -300,3 +302,7 @@ elif page == "📋 运行记录":
     page_runs()
 else:
     page_report()
+
+# Footer disclaimer — shown at the bottom of every page.
+st.divider()
+st.caption(config.DISCLAIMER)

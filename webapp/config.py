@@ -62,6 +62,12 @@ SKILL_ZH = "report-cheatsheet-zh"
 # If unset, the app runs open (fine for localhost-only use).
 APP_PASSWORD = os.getenv("WEBAPP_PASSWORD", "")
 
+# Disclaimer shown on the login screen and as a footer on every page.
+DISCLAIMER = (
+    "⚠️ 本工具仅供学习与研究，所有分析均由 AI 生成，可能出错，"
+    "不构成任何投资建议。请独立判断，投资有风险，盈亏自负。"
+)
+
 # Analyst keys understood by TradingAgentsGraph(selected_analysts=...).
 ANALYST_CHOICES = {
     "market": "技术面（行情与指标）",
