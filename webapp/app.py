@@ -121,13 +121,18 @@ def page_new_analysis() -> None:
     st.caption("输入股票代码 → 点「开始分析」。分析需要几分钟，提交后在「📋 运行记录」里看进度。"
                "第一次使用建议先看左侧「❓ 使用帮助」。")
 
-    col1, col2 = st.columns(2)
+    col1, col2, col3 = st.columns(3)
     with col1:
         ticker = st.text_input("股票代码", value="NVDA",
                                help="美股代码，如 NVDA、AAPL、TSLA").strip().upper()
     with col2:
         trade_date = st.date_input("分析日期", value=date.today(),
                                    help="分析截至的日期，一般选今天")
+    with col3:
+        lang_labels = list(config.REPORT_LANGUAGES.keys())
+        report_lang_label = st.selectbox("报告语言", lang_labels, index=0,
+                                         help="生成的报告用哪种语言书写")
+        output_language = config.REPORT_LANGUAGES[report_lang_label]
 
     st.subheader("分析师团队")
     st.caption("默认四位全选即可（最全面）。想更快可取消其中几位。")
@@ -150,6 +155,7 @@ def page_new_analysis() -> None:
             analysts=selected,
             debate_rounds=debate_rounds,
             risk_rounds=risk_rounds,
+            output_language=output_language,
         )
         st.success(f"✅ 已提交：{ticker} —— 请去左侧「📋 运行记录」查看进度。")
         st.balloons()

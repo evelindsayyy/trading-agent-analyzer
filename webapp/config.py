@@ -82,6 +82,13 @@ ANALYST_SHORT_ZH = {
     "news": "消息面", "fundamentals": "基本面",
 }
 
+# Language the analysts write the report in. Default Chinese for this audience.
+# The engine turns this into "Write your entire response in {value}".
+OUTPUT_LANGUAGE = os.getenv("WEBAPP_OUTPUT_LANGUAGE", "中文")
+
+# Report-language options for the New Analysis page (display label -> engine value).
+REPORT_LANGUAGES = {"中文": "中文", "English": "English"}
+
 # Plain-Chinese gloss for the report's final rating signal.
 RATING_ZH = {
     "Buy": "买入", "Overweight": "加仓（看好）", "Hold": "持有",

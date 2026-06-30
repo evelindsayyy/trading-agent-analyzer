@@ -24,7 +24,8 @@ class JobManager:
         self._pool = ThreadPoolExecutor(max_workers=max_workers)
 
     def start_run(self, ticker: str, date: str, analysts: list[str],
-                  debate_rounds: int = 1, risk_rounds: int = 1) -> str:
+                  debate_rounds: int = 1, risk_rounds: int = 1,
+                  output_language: str | None = None) -> str:
         ticker = ticker.strip().upper()
         job_id = f"{ticker}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
         status = {
@@ -34,6 +35,7 @@ class JobManager:
             "analysts": analysts,
             "debate_rounds": debate_rounds,
             "risk_rounds": risk_rounds,
+            "output_language": output_language or config.OUTPUT_LANGUAGE,
             "status": "queued",
             "created_at": _now(),
             "started_at": None,
@@ -63,6 +65,7 @@ class JobManager:
             cfg["deep_think_llm"] = config.DEEP_MODEL
             cfg["quick_think_llm"] = config.QUICK_MODEL
             cfg["backend_url"] = None
+            cfg["output_language"] = status.get("output_language") or config.OUTPUT_LANGUAGE
             cfg["max_debate_rounds"] = status["debate_rounds"]
             cfg["max_risk_discuss_rounds"] = status["risk_rounds"]
 
