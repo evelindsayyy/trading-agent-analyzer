@@ -71,7 +71,7 @@ def page_new_analysis() -> None:
     st.subheader("分析师团队")
     selected = []
     cols = st.columns(len(config.ANALYST_CHOICES))
-    for (key, label), c in zip(config.ANALYST_CHOICES.items(), cols):
+    for (key, label), c in zip(config.ANALYST_CHOICES.items(), cols, strict=True):
         if c.checkbox(label, value=True, key=f"an_{key}"):
             selected.append(key)
 
@@ -124,11 +124,11 @@ def _render_runs_list() -> None:
             if j["status"] == "failed" and j.get("error"):
                 with st.expander("错误详情"):
                     st.code(j["error"])
-            if j["status"] == "done" and j.get("report_dir"):
-                if st.button("查看报告 →", key=f"view_{j['id']}"):
-                    st.session_state["selected_run"] = j["report_dir"]
-                    st.session_state["goto_report"] = True
-                    st.rerun()  # full rerun to switch pages
+            if (j["status"] == "done" and j.get("report_dir")
+                    and st.button("查看报告 →", key=f"view_{j['id']}")):
+                st.session_state["selected_run"] = j["report_dir"]
+                st.session_state["goto_report"] = True
+                st.rerun()  # full rerun to switch pages
 
     # Once every job has finished, settle: a one-shot full rerun drops the
     # fragment's run_every timer (set to None on the next render) so we stop

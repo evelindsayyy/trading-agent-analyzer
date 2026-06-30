@@ -8,7 +8,6 @@ not need filesystem access) plus the language and holdings context.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 from . import config
 from .report_store import Run
