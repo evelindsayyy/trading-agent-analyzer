@@ -62,6 +62,39 @@ start with `WEBAPP_` (provider, models, reports dir, prompts dir, password gate)
 By default the app forces DeepSeek for both analysis and the cheatsheet,
 independent of whatever provider the CLI uses.
 
+## Deploy a live site (Streamlit Community Cloud)
+
+GitHub Pages can't host this — it only serves static files, and this is a live
+Python/Streamlit server. The easiest real host is **Streamlit Community Cloud**:
+
+1. Push this repo to GitHub (done).
+2. Go to **https://share.streamlit.io** → sign in with GitHub → **New app**.
+3. Pick repo **`evelindsayyy/trading-agent-analyzer`**, branch **`main`**, and set
+   **Main file path** to **`webapp/app.py`**.
+4. **Advanced settings**:
+   - Python version: **3.12** (3.11/3.13 also fine).
+   - **Secrets**: paste (see `.streamlit/secrets.toml.example`):
+     ```toml
+     DEEPSEEK_API_KEY = "sk-..."
+     WEBAPP_PASSWORD   = "choose-a-passphrase"   # recommended: the app is public
+     ```
+5. **Deploy**. First build takes a few minutes (it installs the engine + deps).
+
+The app reads those secrets as environment variables (bridged in
+`webapp/config.py`), so no code changes are needed.
+
+**Honest caveats for the free tier** — fine for a demo, not durable multi-user:
+- The app **sleeps when idle**; an in-flight analysis can be killed when it
+  spins down. Background runs are best kicked off while you're watching.
+- Disk is **ephemeral** — generated reports under `reports/` are lost on
+  restart/redeploy. (Add object storage / a DB for persistence.)
+- TradingAgents runs are **multi-minute and use paid DeepSeek calls**; the
+  free tier's ~1 GB RAM can be tight. Set `WEBAPP_PASSWORD` so it isn't open to
+  the world running up your DeepSeek bill.
+
+For always-on hosting with real disk, use Render / Railway / Fly.io or a VPS
+(`streamlit run webapp/app.py` behind a reverse proxy) — same secrets.
+
 ## Attribution & license
 
 The analysis engine is **TradingAgents** by Tauric Research

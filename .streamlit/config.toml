@@ -1,0 +1,8 @@
+# Streamlit app config (committed). Secrets go in .streamlit/secrets.toml (ignored).
+[theme]
+base = "light"
+primaryColor = "#e8503a"
+
+[server]
+# Larger uploads aren't needed; keep the app lean.
+maxUploadSize = 5

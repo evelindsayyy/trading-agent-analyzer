@@ -11,6 +11,24 @@ from dotenv import load_dotenv
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_REPO_ROOT / ".env")
 
+
+def _bridge_streamlit_secrets() -> None:
+    """On Streamlit Community Cloud there is no .env — keys come from st.secrets.
+    Copy any top-level string secrets into os.environ so the rest of the app
+    (which reads env vars) works unchanged. Guarded so non-Streamlit contexts
+    and the no-secrets case are no-ops."""
+    try:
+        import streamlit as st
+
+        for key, value in st.secrets.items():
+            if isinstance(value, str):
+                os.environ.setdefault(key, value)
+    except Exception:
+        pass
+
+
+_bridge_streamlit_secrets()
+
 # Where finished report trees are written and read from. We default to the repo
 # `reports/` dir — the same place existing runs and the cheatsheet skills look.
 REPORTS_ROOT = Path(os.getenv("WEBAPP_REPORTS_ROOT", _REPO_ROOT / "reports"))
