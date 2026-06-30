@@ -18,10 +18,17 @@ if str(_REPO_ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from webapp import cheatsheet, config, job_manager, report_store  # noqa: E402
+from webapp import cheatsheet, config, job_manager, report_store, storage  # noqa: E402
 
 st.set_page_config(page_title="TradingAgents", page_icon="📈", layout="wide")
-config.ensure_dirs()
+try:
+    storage.init()  # ensure dirs + (when DATABASE_URL is set) the runs table
+except Exception as exc:  # noqa: BLE001 — show a friendly message, not a stack trace
+    st.error(
+        "数据库连接失败 / Database connection failed. 请检查 DATABASE_URL 是否正确。\n\n"
+        f"{type(exc).__name__}: {exc}"
+    )
+    st.stop()
 
 
 # --------------------------------------------------------------------------- #

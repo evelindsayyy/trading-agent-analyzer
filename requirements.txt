@@ -1,3 +1,6 @@
-# Installs the tradingagents package (via pyproject) + the web app dep.
+# Installs the tradingagents package (via pyproject) + the web app deps.
 .
 streamlit>=1.40
+# Durable storage when DATABASE_URL is set (Postgres in prod; SQLite for tests).
+SQLAlchemy>=2.0
+psycopg2-binary>=2.9

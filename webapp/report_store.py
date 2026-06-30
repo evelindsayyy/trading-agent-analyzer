@@ -1,10 +1,9 @@
-"""Read finished report trees from disk for the UI to display."""
+"""Read finished runs for the UI to display, via the storage layer."""
 from __future__ import annotations
 
 from dataclasses import dataclass
-from pathlib import Path
 
-from . import config
+from . import storage
 
 # Ordered map of the report tree → human labels, mirroring write_report_tree().
 SECTION_FILES: list[tuple[str, str]] = [
@@ -25,53 +24,46 @@ SECTION_FILES: list[tuple[str, str]] = [
 
 @dataclass
 class Run:
-    name: str           # folder name, e.g. WDC_20260630_120612
-    path: Path
+    name: str            # the run id, e.g. WDC_20260630_120612
     ticker: str
-    timestamp: str      # raw YYYYMMDD_HHMMSS part
+    timestamp: str       # raw YYYYMMDD_HHMMSS part
+    signal: str | None = None
+
+
+def _to_run(rec: dict) -> Run:
+    name = rec["id"]
+    _, _, stamp = name.partition("_")
+    return Run(name=name, ticker=rec.get("ticker", ""), timestamp=stamp,
+               signal=rec.get("signal"))
 
 
 def list_runs() -> list[Run]:
-    """Newest-first list of report folders under REPORTS_ROOT."""
-    runs: list[Run] = []
-    if not config.REPORTS_ROOT.exists():
-        return runs
-    for p in config.REPORTS_ROOT.iterdir():
-        if not p.is_dir() or p.name.startswith("."):
-            continue
-        if not (p / "complete_report.md").exists():
-            continue
-        ticker, _, stamp = p.name.partition("_")
-        runs.append(Run(name=p.name, path=p, ticker=ticker, timestamp=stamp))
-    runs.sort(key=lambda r: r.timestamp, reverse=True)
-    return runs
+    """Newest-first list of finished runs (those with a report)."""
+    return [_to_run(r) for r in storage.list_status() if r.get("status") == "done"]
 
 
 def get_run(name: str) -> Run | None:
-    p = config.REPORTS_ROOT / name
-    if not p.is_dir():
+    rec = storage.load_status(name)
+    if rec is None:
         return None
-    ticker, _, stamp = name.partition("_")
-    return Run(name=name, path=p, ticker=ticker, timestamp=stamp)
-
-
-def read_section(run: Run, rel_path: str) -> str | None:
-    f = run.path / rel_path
-    if f.exists():
-        return f.read_text(encoding="utf-8")
-    return None
+    return _to_run(rec)
 
 
 def available_sections(run: Run) -> list[tuple[str, str, str]]:
-    """Return (rel_path, label, content) for sections that exist in this run."""
+    """Return (rel_path, label, content) for sections present in this run."""
+    files = storage.load_report_files(run.name)
     out = []
     for rel, label in SECTION_FILES:
-        content = read_section(run, rel)
+        content = files.get(rel)
         if content:
             out.append((rel, label, content))
     return out
 
 
+def report_files(run: Run) -> dict:
+    """All report-tree files for a run, keyed by relative path."""
+    return storage.load_report_files(run.name)
+
+
 def existing_cheatsheet(run: Run, lang: str) -> str | None:
-    fname = "beginner_cheatsheet_zh.md" if lang == "zh" else "beginner_cheatsheet.md"
-    return read_section(run, fname)
+    return storage.load_cheatsheet(run.name, lang)

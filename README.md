@@ -95,6 +95,39 @@ The app reads those secrets as environment variables (bridged in
 For always-on hosting with real disk, use Render / Railway / Fly.io or a VPS
 (`streamlit run webapp/app.py` behind a reverse proxy) — same secrets.
 
+## Persistence — keep runs forever (recommended for hosting)
+
+By default the app stores runs as **local files** under `reports/`. That's perfect
+on your own computer, but on a host like Streamlit Cloud the disk is **wiped on
+every restart**, so generated runs would disappear. To keep every run forever in
+one shared library, point the app at a free **Postgres** database by setting
+`DATABASE_URL`. When it's set, the app stores all run metadata, reports, and
+cheatsheets in the database instead of local files (no code changes — it just
+switches backends).
+
+### Set it up with a free database (one-time, ~3 minutes)
+
+Using **Neon** (simplest) — or Supabase works the same way:
+
+1. Go to **https://neon.tech** → sign up (free) → **Create project**.
+2. On the project dashboard, copy the **connection string** — it looks like
+   `postgresql://user:password@ep-xxxx.region.aws.neon.tech/dbname`.
+3. In your **Streamlit Cloud** app → **Settings → Secrets**, add:
+   ```toml
+   DATABASE_URL = "postgresql://...the string you copied..."
+   ```
+4. Save → the app reboots → done. The app creates its table automatically on
+   first start, and from now on **every run is saved permanently** and visible to
+   everyone who logs in.
+
+No database administration needed — the app manages its own schema. If
+`DATABASE_URL` is wrong, the app shows a clear "database connection failed"
+message instead of crashing.
+
+> One shared library: everyone who logs in sees the same runs (matches the
+> single-password setup). Per-user private histories would need real accounts —
+> a larger change, not included here.
+
 ## Attribution & license
 
 The analysis engine is **TradingAgents** by Tauric Research

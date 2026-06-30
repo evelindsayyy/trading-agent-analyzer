@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 
-from . import config
+from . import config, storage
 from .report_store import Run
 
 # Files the skills tell us to read, in priority order. We skip complete_report.md.
@@ -44,13 +44,14 @@ def _skill_body(lang: str) -> str:
 
 
 def _gather_report_text(run: Run) -> str:
+    files = storage.load_report_files(run.name)
     chunks = []
     for rel in _CHEATSHEET_SOURCES:
-        f = run.path / rel
-        if f.exists():
-            chunks.append(f"===== {rel} =====\n{f.read_text(encoding='utf-8')}")
+        content = files.get(rel)
+        if content:
+            chunks.append(f"===== {rel} =====\n{content}")
     if not chunks:
-        raise FileNotFoundError(f"该报告目录里没有可用的角色文件：{run.path}")
+        raise FileNotFoundError(f"该报告没有可用的角色文件：{run.name}")
     return "\n\n".join(chunks)
 
 
@@ -124,7 +125,6 @@ def generate(run: Run, lang: str = "zh", shares: str = "", cost: str = "",
     markdown = normalize_content(response).content.strip()
 
     if save:
-        fname = "beginner_cheatsheet_zh.md" if lang == "zh" else "beginner_cheatsheet.md"
-        (run.path / fname).write_text(markdown, encoding="utf-8")
+        storage.save_cheatsheet(run.name, lang, markdown)
 
     return markdown
