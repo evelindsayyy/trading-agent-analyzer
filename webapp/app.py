@@ -1,9 +1,6 @@
-"""TradingAgents web app (Streamlit).
+"""智析 · AI 股票分析助手 — Streamlit app.
 
 Run from the repo root:  streamlit run webapp/app.py
-
-Lets you (and a few friends) generate analyses, browse reports, and produce the
-beginner cheatsheet — all without the terminal.
 """
 from __future__ import annotations
 
@@ -18,32 +15,31 @@ if str(_REPO_ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from webapp import cheatsheet, cjk, config, job_manager, report_store, storage  # noqa: E402
+from webapp import (cheatsheet, cjk, config, job_manager,  # noqa: E402
+                    report_store, storage, ui)
 
-st.set_page_config(page_title="AI 股票分析助手", page_icon="📈", layout="wide")
-cjk.inject_fonts(st)  # consistent CJK font stack across the whole app
+st.set_page_config(page_title="智析 · AI 股票分析助手", page_icon="📈", layout="wide")
+st.markdown(ui.CSS, unsafe_allow_html=True)
 try:
     storage.init()  # ensure dirs + (when DATABASE_URL is set) the runs table
-except Exception as exc:  # noqa: BLE001 — show a friendly message, not a stack trace
-    st.error(
-        "数据库连接失败 / Database connection failed. 请检查 DATABASE_URL 是否正确。\n\n"
-        f"{type(exc).__name__}: {exc}"
-    )
+except Exception as exc:  # noqa: BLE001 — friendly message, not a stack trace
+    st.error("数据库连接失败 / Database connection failed. 请检查 DATABASE_URL 是否正确。\n\n"
+             f"{type(exc).__name__}: {exc}")
     st.stop()
 
 
 # --------------------------------------------------------------------------- #
-# Auth gate (simple shared password for an internal deployment)
+# Auth gate
 # --------------------------------------------------------------------------- #
 def check_password() -> bool:
-    if not config.APP_PASSWORD:
-        return True  # open mode (localhost-only use)
-    if st.session_state.get("authed"):
+    if not config.APP_PASSWORD or st.session_state.get("authed"):
         return True
-    st.title("🔒 AI 股票分析助手")
+    st.markdown(ui.brand_header(), unsafe_allow_html=True)
+    st.title("欢迎使用")
     st.caption("请输入访问口令进入（向分享给你的人索取）。")
-    pw = st.text_input("访问口令", type="password")
-    if st.button("进入"):
+    pw = st.text_input("访问口令", type="password", label_visibility="collapsed",
+                       placeholder="访问口令")
+    if st.button("进入", type="primary"):
         if pw == config.APP_PASSWORD:
             st.session_state["authed"] = True
             st.rerun()
@@ -59,184 +55,117 @@ if not check_password():
 
 
 # --------------------------------------------------------------------------- #
-# Sidebar navigation
+# Pages
 # --------------------------------------------------------------------------- #
-st.sidebar.title("📈 AI 股票分析助手")
-PAGES = ["❓ 使用帮助", "🚀 新建分析", "📋 运行记录", "📄 报告 & 速查表"]
-page = st.sidebar.radio("导航", PAGES)
-if storage.db_enabled():
-    st.sidebar.caption("💾 运行记录已永久保存")
-else:
-    st.sidebar.caption("⚠️ 临时存储：应用重启后记录会丢失")
-
-
-# --------------------------------------------------------------------------- #
-# Page: Help / instruction manual
-# --------------------------------------------------------------------------- #
-def page_help() -> None:
-    st.header("❓ 使用帮助")
-    st.markdown(
-        """
-### 这个工具是做什么的？
-它是一个 **AI 股票分析助手**。你给它一个股票代码，它会自动派出多个 AI「分析师」
-（看**技术面、消息面、基本面、市场情绪**），让「多头」和「空头」互相辩论，再做风险
-评估，最后给出一个明确的结论（**买入 / 卖出 / 持有 / 加仓 / 减仓**），还能把复杂报告
-变成新手也能看懂的「**速查表**」。
-
-### 三步上手
-**第 1 步 · 发起分析** — 左侧点「🚀 新建分析」，输入股票代码（例如美股 `NVDA`、
-`AAPL`、`TSLA`），选好日期，点「开始分析」。
-
-**第 2 步 · 等待结果** — 点「📋 运行记录」看进度。分析需要**几分钟**（AI 要查很多
-资料并辩论），页面会自动刷新，状态变成 ✅ **完成** 就好了。
-
-**第 3 步 · 看结果** — 点「📄 报告 & 速查表」，选中你的那条记录：
-- **完整报告**：分章节的详细分析（技术面、情绪面、多空辩论、最终决策等）。
-- **新手速查表**：一页纸的大白话总结，直接告诉你「**结论是什么、关键价位、分几步
-  怎么做**」。可切换中文 / English；填上你的持仓还能算「卖 / 买多少股」。
-
-### 常见名词
-| 词 | 意思 |
-|---|---|
-| **评级** | AI 的总结论：买入 / 加仓(看好) / 持有 / 减仓(看淡) / 卖出 |
-| **速查表** | 把专业报告翻译成新手能照做的「该怎么办」 |
-| **持仓股数** | 你现在手里有多少股；填 `0` 表示空仓（还没买） |
-| **止损** | 跌到某个价就卖出，用来控制亏损 |
-
-### ⚠️ 重要提醒（请务必阅读）
-- 本工具**仅供学习和参考，不构成任何投资建议**。AI 会犯错，所有盈亏由你自己负责。
-- 每次分析会消耗一点 API 费用、耗时几分钟，请**不要重复狂点**。
-- 报告是**分析当天的快照**，市场价格随时会变，过几天就可能过时。
-"""
-    )
-    if st.button("🚀 我知道了，去发起第一次分析", type="primary"):
+def page_guide() -> None:
+    st.markdown(ui.guide_html(), unsafe_allow_html=True)
+    st.write("")
+    if st.button("我知道了，去发起第一次分析 →", type="primary"):
         st.session_state["goto_new"] = True
         st.rerun()
 
 
-# --------------------------------------------------------------------------- #
-# Page: New analysis
-# --------------------------------------------------------------------------- #
 def page_new_analysis() -> None:
-    st.header("🚀 新建分析")
-    st.caption("输入股票代码 → 点「开始分析」。分析需要几分钟，提交后在「📋 运行记录」里看进度。"
-               "第一次使用建议先看左侧「❓ 使用帮助」。")
+    st.markdown("<h1 style='font-family:\"Noto Serif SC\",serif;'>新建分析</h1>",
+                unsafe_allow_html=True)
+    st.caption("输入股票代码 → 点「开始分析」。分析需要几分钟，提交后到「分析记录」看进度。")
 
-    col1, col2, col3 = st.columns(3)
-    with col1:
+    c1, c2, c3 = st.columns([1.3, 1, 1])
+    with c1:
         ticker = st.text_input("股票代码", value="NVDA",
                                help="美股代码，如 NVDA、AAPL、TSLA").strip().upper()
-    with col2:
+        st.markdown(
+            '<div style="font-size:12px;color:#9A958B;margin-top:-6px;">试试 '
+            '<span class="mono" style="color:#1C6E66;background:#E6F0EE;padding:2px 8px;border-radius:6px;">NVDA</span> '
+            '<span class="mono" style="background:#EEEAE0;padding:2px 8px;border-radius:6px;">AAPL</span> '
+            '<span class="mono" style="background:#EEEAE0;padding:2px 8px;border-radius:6px;">TSLA</span></div>',
+            unsafe_allow_html=True)
+    with c2:
         trade_date = st.date_input("分析日期", value=date.today(),
-                                   help="分析截至的日期，一般选今天")
-    with col3:
+                                   help="一般选今天即可")
+    with c3:
         lang_labels = list(config.REPORT_LANGUAGES.keys())
         report_lang_label = st.selectbox("报告语言", lang_labels, index=0,
                                          help="生成的报告用哪种语言书写")
         output_language = config.REPORT_LANGUAGES[report_lang_label]
 
-    st.subheader("分析师团队")
-    st.caption("默认四位全选即可（最全面）。想更快可取消其中几位。")
     selected = []
-    cols = st.columns(len(config.ANALYST_CHOICES))
-    for (key, label), c in zip(config.ANALYST_CHOICES.items(), cols, strict=True):
-        if c.checkbox(label, value=True, key=f"an_{key}"):
-            selected.append(key)
+    items = list(config.ANALYST_CHOICES.items())
+    st.write("")
+    cols = st.columns(2)
+    for i, (key, label) in enumerate(items):
+        with cols[i % 2], st.container(border=True):
+            if st.checkbox(label, value=True, key=f"an_{key}"):
+                selected.append(key)
+    st.markdown(
+        f'<div style="font-size:13px;color:#1C6E66;font-weight:600;margin:2px 0 4px;">'
+        f'已选 {len(selected)} / 4 位分析师</div>'
+        '<div style="font-size:12.5px;color:#9A958B;">默认四位全选最全面；取消其中几位可更快。</div>',
+        unsafe_allow_html=True)
 
-    with st.expander("⚙️ 高级设置（辩论深度，可不动）"):
+    with st.expander("⚙️ 高级设置 · 辩论深度（可不动）"):
         debate_rounds = st.slider("研究辩论轮数", 1, 3, 1,
                                   help="多头/空头来回的轮数，越多越深入，也越慢越贵")
         risk_rounds = st.slider("风险讨论轮数", 1, 3, 1,
                                 help="风险评估的来回轮数，越多越深入")
 
-    if st.button("▶️ 开始分析", type="primary", disabled=not (ticker and selected)):
+    st.write("")
+    if st.button("▶ 开始分析", type="primary", disabled=not (ticker and selected)):
         job_id = job_manager.manager.start_run(
-            ticker=ticker,
-            date=trade_date.strftime("%Y-%m-%d"),
-            analysts=selected,
-            debate_rounds=debate_rounds,
-            risk_rounds=risk_rounds,
-            output_language=output_language,
-        )
-        st.success(f"✅ 已提交：{ticker} —— 请去左侧「📋 运行记录」查看进度。")
+            ticker=ticker, date=trade_date.strftime("%Y-%m-%d"),
+            analysts=selected, debate_rounds=debate_rounds,
+            risk_rounds=risk_rounds, output_language=output_language)
+        st.success(f"✅ 已提交：{ticker} —— 请去左侧「分析记录」查看进度。")
         st.balloons()
         st.session_state["last_job"] = job_id
 
 
-# --------------------------------------------------------------------------- #
-# Page: Run records
-# --------------------------------------------------------------------------- #
-_STATUS_BADGE = {
-    "queued": "🕒 排队中", "running": "⏳ 运行中",
-    "done": "✅ 完成", "failed": "❌ 失败",
-}
-
-
 def _render_runs_list() -> None:
-    """Render the job cards. Re-run on its own (as a fragment) so only this list
-    refreshes — no whole-page rerun, no flicker/dimming."""
     jobs = job_manager.list_jobs()
     if not jobs:
-        st.info("还没有运行记录。去「新建分析」提交第一个。")
+        st.info("还没有分析记录。请去左侧「新建分析」发起第一个。")
         return
-
     for j in jobs:
-        badge = _STATUS_BADGE.get(j["status"], j["status"])
-        analysts_zh = "、".join(
-            config.ANALYST_SHORT_ZH.get(a, a) for a in j["analysts"])
-        with st.container(border=True):
-            top = st.columns([2, 1, 2, 1])
-            top[0].markdown(f"**{j['ticker']}** · {j['date']}")
-            top[1].markdown(badge)
-            top[2].caption(f"分析师：{analysts_zh}")
-            if j["status"] == "done" and j.get("signal"):
-                rating = config.RATING_ZH.get(j["signal"], j["signal"])
-                top[3].markdown(f"**{rating}**")
-
-            if j["status"] == "running":
-                st.caption(f"开始于 {j['started_at']}　·　分析需要几分钟，请耐心等待")
-            if j["status"] == "failed" and j.get("error"):
-                with st.expander("错误详情"):
-                    st.code(j["error"])
-            if (j["status"] == "done" and j.get("report_dir")
-                    and st.button("查看报告 →", key=f"view_{j['id']}")):
-                st.session_state["selected_run"] = j["report_dir"]
-                st.session_state["goto_report"] = True
-                st.rerun()  # full rerun to switch pages
-
-    # Once every job has finished, settle: a one-shot full rerun drops the
-    # fragment's run_every timer (set to None on the next render) so we stop
-    # polling. The session flag prevents this from looping when already idle.
+        analysts_zh = " · ".join(config.ANALYST_SHORT_ZH.get(a, a) for a in j["analysts"])
+        rating = config.RATING_ZH.get(j.get("signal"), j.get("signal")) if j.get("signal") else None
+        is_buy = j.get("signal") in ("Buy", "Overweight")
+        st.markdown(ui.run_card_html(j["ticker"], j["date"], j["status"],
+                                     analysts_zh, rating, is_buy),
+                    unsafe_allow_html=True)
+        if j["status"] == "failed" and j.get("error"):
+            with st.expander("错误详情"):
+                st.code(j["error"])
+        if (j["status"] == "done" and j.get("report_dir")
+                and st.button("查看报告 →", key=f"view_{j['id']}")):
+            st.session_state["selected_run"] = j["report_dir"]
+            st.session_state["goto_report"] = True
+            st.rerun()
     if not job_manager.has_active_jobs() and st.session_state.get("_runs_refreshing"):
         st.session_state["_runs_refreshing"] = False
         st.rerun()
 
 
 def page_runs() -> None:
-    st.header("📋 运行记录")
+    st.markdown("<h1 style='font-family:\"Noto Serif SC\",serif;'>分析记录</h1>",
+                unsafe_allow_html=True)
+    st.caption("分析需要几分钟，运行中的会自动刷新。状态变成「完成」就能查看报告。")
     active = job_manager.has_active_jobs()
     st.session_state["_runs_refreshing"] = active
-    # Only attach the 3s timer while something is running; idle = render once.
     st.fragment(run_every=3 if active else None)(_render_runs_list)()
 
 
-# --------------------------------------------------------------------------- #
-# Page: Report viewer + cheatsheet
-# --------------------------------------------------------------------------- #
 def _run_label(run: report_store.Run) -> str:
-    """Readable option label, e.g. 'NVDA · 2026-06-30 14:07'."""
     s = run.timestamp
-    # s is YYYYMMDD_HHMMSS → 'YYYY-MM-DD HH:MM'
     pretty = f"{s[0:4]}-{s[4:6]}-{s[6:8]} {s[9:11]}:{s[11:13]}" if len(s) >= 13 else s
     return f"{run.ticker} · {pretty}"
 
 
 def page_report() -> None:
-    st.header("📄 报告 & 速查表")
+    st.markdown("<h1 style='font-family:\"Noto Serif SC\",serif;'>报告 &amp; 速查表</h1>",
+                unsafe_allow_html=True)
     runs = report_store.list_runs()
     if not runs:
-        st.info("还没有完成的报告。请先去左侧「🚀 新建分析」发起一次分析，"
-                "完成后回到这里查看。")
+        st.info("还没有完成的报告。请先去「新建分析」发起一次分析。")
         return
 
     names = [r.name for r in runs]
@@ -251,17 +180,22 @@ def page_report() -> None:
         st.error("找不到该报告。")
         return
 
-    tab_report, tab_cheat = st.tabs(["📑 完整报告", "🎯 新手速查表（推荐新手先看）"])
+    rating = config.RATING_ZH.get(run.signal, run.signal) if run.signal else None
+    is_buy = run.signal in ("Buy", "Overweight")
+    st.markdown(ui.summary_card_html(run.ticker, _run_label(run).split("· ")[-1],
+                                     rating, is_buy), unsafe_allow_html=True)
 
+    tab_report, tab_cheat = st.tabs(["完整报告", "新手速查表 · 推荐"])
     with tab_report:
-        st.caption("AI 分析师团队的详细报告，按章节查看。看不懂可切到「新手速查表」。")
         sections = report_store.available_sections(run)
-        labels = [label for _, label, _ in sections]
-        picked = st.radio("章节", labels, horizontal=True)
-        for _, label, content in sections:
-            if label == picked:
-                st.markdown(cjk.clean_markdown(content))
-
+        if not sections:
+            st.info("该报告暂无可显示的章节。")
+        else:
+            labels = [label for _, label, _ in sections]
+            picked = st.radio("章节", labels, horizontal=True, label_visibility="collapsed")
+            for _, label, content in sections:
+                if label == picked:
+                    st.markdown(cjk.clean_markdown(content))
     with tab_cheat:
         _cheatsheet_ui(run)
 
@@ -294,22 +228,32 @@ def _cheatsheet_ui(run: report_store.Run) -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Router
+# Sidebar nav + router
 # --------------------------------------------------------------------------- #
-if st.session_state.pop("goto_report", False):
-    page = "📄 报告 & 速查表"
-elif st.session_state.pop("goto_new", False):
-    page = "🚀 新建分析"
+NAV = {"① 上手指南": "guide", "② 新建分析": "new",
+       "③ 分析记录": "runs", "④ 报告 & 速查表": "report"}
+_LABEL_FOR = {v: k for k, v in NAV.items()}
 
-if page == "❓ 使用帮助":
-    page_help()
-elif page == "🚀 新建分析":
+# Pending programmatic navigation (set the radio value before it's created).
+if st.session_state.pop("goto_report", False):
+    st.session_state["nav"] = _LABEL_FOR["report"]
+elif st.session_state.pop("goto_new", False):
+    st.session_state["nav"] = _LABEL_FOR["new"]
+
+st.sidebar.markdown(ui.brand_header(), unsafe_allow_html=True)
+nav = st.sidebar.radio("导航", list(NAV), key="nav", label_visibility="collapsed")
+st.sidebar.markdown(ui.storage_pill(storage.db_enabled()), unsafe_allow_html=True)
+page = NAV[nav]
+
+if page == "guide":
+    page_guide()
+elif page == "new":
     page_new_analysis()
-elif page == "📋 运行记录":
+elif page == "runs":
     page_runs()
 else:
     page_report()
 
-# Footer disclaimer — shown at the bottom of every page.
+# Footer disclaimer on every page.
 st.divider()
 st.caption(config.DISCLAIMER)
