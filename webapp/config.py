@@ -64,10 +64,22 @@ APP_PASSWORD = os.getenv("WEBAPP_PASSWORD", "")
 
 # Analyst keys understood by TradingAgentsGraph(selected_analysts=...).
 ANALYST_CHOICES = {
-    "market": "Market（技术面）",
-    "social": "Sentiment（情绪面）",
-    "news": "News（新闻/宏观）",
-    "fundamentals": "Fundamentals（基本面）",
+    "market": "技术面（行情与指标）",
+    "social": "情绪面（社交舆情）",
+    "news": "消息面（新闻与宏观）",
+    "fundamentals": "基本面（财务数据）",
+}
+
+# Short Chinese names for compact display (e.g. the run cards).
+ANALYST_SHORT_ZH = {
+    "market": "技术面", "social": "情绪面",
+    "news": "消息面", "fundamentals": "基本面",
+}
+
+# Plain-Chinese gloss for the report's final rating signal.
+RATING_ZH = {
+    "Buy": "买入", "Overweight": "加仓（看好）", "Hold": "持有",
+    "Underweight": "减仓（看淡）", "Sell": "卖出",
 }
 
 
