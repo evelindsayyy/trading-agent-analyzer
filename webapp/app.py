@@ -20,7 +20,8 @@ import streamlit as st  # noqa: E402
 
 from webapp import cheatsheet, cjk, config, job_manager, report_store, storage  # noqa: E402
 
-st.set_page_config(page_title="AI 股票分析助手", page_icon="📈", layout="wide")
+st.set_page_config(page_title="AI 股票分析助手", page_icon="📈", layout="wide",
+                   initial_sidebar_state="expanded")
 cjk.inject_fonts(st)  # consistent CJK font stack across the whole app
 try:
     storage.init()  # ensure dirs + (when DATABASE_URL is set) the runs table

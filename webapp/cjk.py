@@ -1,16 +1,19 @@
 """Helpers that make Chinese (CJK) text render correctly in the Streamlit UI.
 
-Two unrelated problems both show up as "the Chinese font looks weird":
+Two unrelated problems both surface as "the Chinese report looks broken":
 
 1. Streamlit ships no CJK font, so the browser falls back per-character to
-   whatever the OS happens to pick — giving uneven weights/sizes and the odd
-   serif glyph. ``inject_fonts`` pins one clean CJK sans-serif stack.
+   whatever the OS happens to pick — uneven weights/sizes and the odd serif
+   glyph. ``inject_fonts`` pins one clean CJK sans-serif stack.
 
-2. CommonMark emphasis (``**bold**``) silently fails to parse when a ``**`` run
-   is hugged by a CJK character on the outside and ASCII punctuation on the
-   inside — e.g. ``价格**$610**`` or ``涨幅**+5%**``. The literal asterisks then
-   leak onto the page. ``clean_markdown`` inserts a hair of space so the
-   delimiters flank correctly, without touching already-valid markdown.
+2. LLM-written reports lean on ``**bold**`` around prices/percentages, but the
+   markers are unreliable next to Chinese: CommonMark emphasis fails to parse
+   when ``**`` hugs a CJK character with ASCII punctuation on the inside
+   (``**$610**``), when a closer has a stray leading space (``低點 **``), or
+   when a paragraph has an odd, orphaned ``**`` that cascades and breaks every
+   bold after it. The literal asterisks then leak onto the page.
+   ``clean_markdown`` re-pairs the markers per line, drops orphans, and re-emits
+   each bold span with proper spacing so it always renders cleanly.
 """
 from __future__ import annotations
 
@@ -21,7 +24,7 @@ import re
 # Chinese always lands on one of these rather than an arbitrary OS default.
 _FONT_STACK = (
     '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, '
-    '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", '
+    '"PingFang SC", "PingFang TC", "Microsoft YaHei", "Hiragino Sans GB", '
     '"Noto Sans CJK SC", "Source Han Sans SC", "WenQuanYi Micro Hei", '
     "sans-serif"
 )
@@ -37,35 +40,71 @@ button, input, textarea, select,
 .stMarkdown p, .stMarkdown li, [data-testid="stMarkdownContainer"] p {{
     line-height: 1.7;
 }}
+/* Keep the "reopen sidebar" control reachable after the sidebar is collapsed. */
+[data-testid="stSidebarCollapsedControl"] {{
+    display: flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}}
 </style>
 """
 
-# Broad CJK range: ideographs, compatibility ideographs, and CJK/fullwidth
-# punctuation. Used only to detect a CJK neighbour next to a ``*`` delimiter.
-_CJK = r"㐀-鿿豈-﫿　-〿＀-￯"
-# ASCII punctuation that, on the inner edge of an emphasis run, breaks flanking.
-# Digits are excluded on purpose — they parse fine (e.g. ``**5,000**``).
-_PUNCT = r"!\"#$%&'()+,\-./:;<=>?@\[\\\]^_`{|}~"
-
-# CJK char immediately before a delimiter run that opens onto punctuation.
-_OPEN_FAIL = re.compile(rf"([{_CJK}])(\*{{1,3}})(?=[{_PUNCT}])")
-# Delimiter run closing off punctuation immediately before a CJK char.
-_CLOSE_FAIL = re.compile(rf"(?<=[{_PUNCT}])(\*{{1,3}})([{_CJK}])")
+# Fullwidth + ASCII punctuation that should never have a space inserted before
+# it, so a closing bold next to e.g. a fullwidth comma stays tight: ``...**，``.
+_NO_SPACE_BEFORE = set("，。、；：！？）】」』’”%,.;:!?)]}…")
 
 
 def inject_fonts(st) -> None:
-    """Apply the CJK-aware font stack to the whole app. Call once, early."""
+    """Apply the CJK-aware font stack (and sidebar fix) to the app. Call once."""
     st.markdown(_FONT_CSS, unsafe_allow_html=True)
 
 
-def clean_markdown(text: str) -> str:
-    """Return ``text`` with CJK-adjacent emphasis delimiters made parseable.
+def _emit_bold(result: str, inner: str, tail: str) -> str:
+    """Append a re-spaced ``**inner**`` span plus the text that follows it."""
+    inner = inner.strip()
+    if not inner:  # empty span — drop the now-useless delimiters
+        return result + tail
+    if result and not result[-1].isspace():
+        result += " "
+    result += f"**{inner}**"
+    if tail and not tail[0].isspace() and tail[0] not in _NO_SPACE_BEFORE:
+        result += " "
+    return result + tail
 
-    Non-destructive: only inserts a single space where a ``*``/``**`` run would
-    otherwise render as literal asterisks. Valid markdown is left unchanged.
+
+def _process_line(line: str) -> str:
+    line = re.sub(r"\*[ \t]\*", "**", line)  # mend a split "* *" back into "**"
+    if "**" not in line:
+        return line
+    parts = line.split("**")
+    pairs = (len(parts) - 1) // 2  # complete open/close pairs; the rest is orphan
+    result, done, i = parts[0], 0, 1
+    while i < len(parts):
+        if done < pairs:
+            tail = parts[i + 1] if i + 1 < len(parts) else ""
+            result = _emit_bold(result, parts[i], tail)
+            done += 1
+            i += 2
+        else:  # leftover orphan delimiter: drop it, keep the text
+            result += parts[i]
+            i += 1
+    return result
+
+
+def clean_markdown(text: str) -> str:
+    """Return ``text`` with CJK-adjacent bold markers repaired.
+
+    Re-pairs ``**`` per line so emphasis always parses, drops orphaned markers
+    that would otherwise leak literal asterisks, and leaves fenced code blocks
+    untouched. Plain text and already-valid markdown survive intact.
     """
     if not text:
         return text
-    text = _OPEN_FAIL.sub(r"\1 \2", text)
-    text = _CLOSE_FAIL.sub(r"\1 \2", text)
-    return text
+    out, in_fence = [], False
+    for line in text.split("\n"):
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        out.append(line if in_fence else _process_line(line))
+    return "\n".join(out)
