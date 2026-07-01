@@ -62,6 +62,13 @@ SKILL_ZH = "report-cheatsheet-zh"
 # If unset, the app runs open (fine for localhost-only use).
 APP_PASSWORD = os.getenv("WEBAPP_PASSWORD", "")
 
+# Storage cap management (DB backend). When stored report/cheatsheet data grows
+# past the soft limit, the oldest finished runs are auto-deleted to make room —
+# so a small free-tier database (e.g. Neon's 0.5 GB) never fills up. The soft
+# limit is set below the real cap to leave headroom for indexes/overhead.
+DB_SOFT_LIMIT_MB = int(os.getenv("WEBAPP_DB_SOFT_LIMIT_MB", "350"))
+DB_KEEP_MIN_RUNS = int(os.getenv("WEBAPP_DB_KEEP_MIN_RUNS", "5"))
+
 # Disclaimer shown on the login screen and as a footer on every page.
 DISCLAIMER = (
     "⚠️ 本工具仅供学习与研究，所有分析均由 AI 生成，可能出错，"

@@ -155,15 +155,20 @@ def brand_header() -> str:
 """
 
 
-def storage_pill(saved: bool) -> str:
+def storage_pill(saved: bool, usage_mb: float | None = None,
+                 cap_mb: int | None = None) -> str:
     if saved:
         dot, text, bg = BUY, "运行记录已永久保存", "#EEEAE0"
     else:
         dot, text, bg = AMBER, "临时存储 · 重启会丢失", "#F6EEDD"
-    return (f'<div style="display:flex;align-items:center;gap:8px;padding:10px 12px;'
-            f'border-radius:11px;background:{bg};margin-top:14px;">'
+    sub = ""
+    if saved and usage_mb is not None and cap_mb:
+        sub = (f'<div style="font-size:10px;color:#9A958B;margin:4px 0 0 15px;">'
+               f'已用 {usage_mb:.1f} / {cap_mb} MB · 满了自动清理最旧的记录</div>')
+    return (f'<div style="padding:10px 12px;border-radius:11px;background:{bg};margin-top:14px;">'
+            f'<div style="display:flex;align-items:center;gap:8px;">'
             f'<span style="width:7px;height:7px;border-radius:50%;background:{dot};"></span>'
-            f'<span style="font-size:11px;color:#6B675D;">{text}</span></div>')
+            f'<span style="font-size:11px;color:#6B675D;">{text}</span></div>{sub}</div>')
 
 
 def eyebrow(text: str) -> str:

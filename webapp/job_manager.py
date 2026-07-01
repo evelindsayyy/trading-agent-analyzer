@@ -80,16 +80,28 @@ class JobManager:
             # store, and a temp source we read into the DB backend).
             report_dir = config.REPORTS_ROOT / status["id"]
             ta.save_reports(final_state, status["ticker"], report_dir)
-            files = {
-                p.relative_to(report_dir).as_posix(): p.read_text(encoding="utf-8")
-                for p in report_dir.rglob("*.md")
-            }
+            # Skip complete_report.md — it's a full concatenation of every section
+            # that the UI never shows, so storing it would ~double the DB usage.
+            files = {}
+            for p in report_dir.rglob("*.md"):
+                if p.name == "complete_report.md":
+                    continue
+                files[p.relative_to(report_dir).as_posix()] = p.read_text(encoding="utf-8")
             storage.save_report_files(status["id"], files)
 
             status["status"] = "done"
             status["signal"] = str(signal)
             status["finished_at"] = _now()
             storage.save_status(status)
+
+            # Keep the database under its soft cap: evict oldest runs if needed.
+            try:
+                pruned = storage.prune()
+                if pruned:
+                    print(f"[{status['id']}] pruned {len(pruned)} old run(s) to stay "
+                          "under the storage cap")
+            except Exception:  # noqa: BLE001 — pruning must never fail a run
+                pass
         except Exception as exc:  # noqa: BLE001 — surface any failure to the UI
             import traceback
             status["status"] = "failed"

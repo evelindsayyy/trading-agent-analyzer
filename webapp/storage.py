@@ -156,6 +156,47 @@ def _db_load_cheatsheet(run_id: str, lang: str) -> str | None:
     return None
 
 
+def _size_expr(dialect: str) -> str:
+    """SQL for a row's stored report+cheatsheet size. Postgres uses on-disk
+    (compressed) bytes; SQLite falls back to JSON text length for tests."""
+    if dialect == "postgresql":
+        return "pg_column_size(report) + pg_column_size(cheatsheets)"
+    return "length(CAST(report AS TEXT)) + length(CAST(cheatsheets AS TEXT))"
+
+
+def _db_data_bytes() -> int:
+    from sqlalchemy import text
+    engine, _ = _db()
+    expr = _size_expr(engine.dialect.name)
+    with engine.connect() as conn:
+        return int(conn.execute(text(f"SELECT COALESCE(SUM({expr}), 0) FROM runs")).scalar() or 0)
+
+
+def _db_prune(limit_bytes: int, keep_min: int) -> list[str]:
+    """Delete oldest finished runs until stored data is under limit_bytes,
+    always keeping at least keep_min rows and never touching active runs."""
+    from sqlalchemy import text
+    engine, _ = _db()
+    expr = _size_expr(engine.dialect.name)
+    pruned: list[str] = []
+    with engine.begin() as conn:
+        total = int(conn.execute(text(f"SELECT COALESCE(SUM({expr}),0) FROM runs")).scalar() or 0)
+        cnt = int(conn.execute(text("SELECT COUNT(*) FROM runs")).scalar() or 0)
+        if total <= limit_bytes:
+            return []
+        rows = conn.execute(text(
+            f"SELECT id, ({expr}) AS s FROM runs WHERE status='done' ORDER BY created_at ASC"
+        )).all()
+        for rid, s in rows:
+            if total <= limit_bytes or cnt <= keep_min:
+                break
+            conn.execute(text("DELETE FROM runs WHERE id = :i"), {"i": rid})
+            total -= int(s or 0)
+            cnt -= 1
+            pruned.append(rid)
+    return pruned
+
+
 # --------------------------------------------------------------------------- #
 # File backend (laptop default — the original on-disk layout)
 # --------------------------------------------------------------------------- #
@@ -260,6 +301,24 @@ def save_report_files(run_id: str, files: dict) -> None:
 
 def load_report_files(run_id: str) -> dict:
     return (_db_load_report_files if db_enabled() else _file_load_report_files)(run_id)
+
+
+def data_bytes() -> int:
+    """Bytes of stored report+cheatsheet data (DB backend); 0 for files."""
+    return _db_data_bytes() if db_enabled() else 0
+
+
+def prune(limit_mb: int | None = None, keep_min: int | None = None) -> list[str]:
+    """Auto-evict oldest finished runs to keep the DB under its soft limit.
+
+    No-op for the file backend (local disk isn't the constrained resource).
+    Returns the ids that were deleted.
+    """
+    if not db_enabled():
+        return []
+    lim = (config.DB_SOFT_LIMIT_MB if limit_mb is None else limit_mb) * 1024 * 1024
+    km = config.DB_KEEP_MIN_RUNS if keep_min is None else keep_min
+    return _db_prune(lim, km)
 
 
 def save_cheatsheet(run_id: str, lang: str, content: str) -> None:

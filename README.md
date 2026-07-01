@@ -128,6 +128,21 @@ message instead of crashing.
 > single-password setup). Per-user private histories would need real accounts —
 > a larger change, not included here.
 
+### Storage stays under the cap automatically
+
+So a small free-tier database (e.g. Neon's 0.5 GB) never fills up:
+
+- **Compact storage** — the redundant `complete_report.md` (a full concatenation
+  of every section, never shown in the UI) is not stored, roughly halving the
+  bytes per run.
+- **Auto-eviction** — after each analysis, if stored data is past the soft limit,
+  the oldest finished runs are deleted to make room. The sidebar shows current
+  usage. Tune with:
+  - `WEBAPP_DB_SOFT_LIMIT_MB` (default `350`) — start evicting past this size.
+  - `WEBAPP_DB_KEEP_MIN_RUNS` (default `5`) — always keep at least this many.
+
+  At ~35 KB per run that's ~10,000 analyses before anything is evicted.
+
 ## Attribution & license
 
 The analysis engine is **TradingAgents** by Tauric Research

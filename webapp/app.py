@@ -15,8 +15,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 import streamlit as st  # noqa: E402
 
-from webapp import (cheatsheet, cjk, config, job_manager,  # noqa: E402
-                    report_store, storage, ui)
+from webapp import cheatsheet, cjk, config, job_manager, report_store, storage, ui  # noqa: E402
 
 st.set_page_config(page_title="智析 · AI 股票分析助手", page_icon="📈", layout="wide",
                    initial_sidebar_state="expanded")
@@ -243,7 +242,10 @@ elif st.session_state.pop("goto_new", False):
 
 st.sidebar.markdown(ui.brand_header(), unsafe_allow_html=True)
 nav = st.sidebar.radio("导航", list(NAV), key="nav", label_visibility="collapsed")
-st.sidebar.markdown(ui.storage_pill(storage.db_enabled()), unsafe_allow_html=True)
+_usage_mb = storage.data_bytes() / 1024 / 1024 if storage.db_enabled() else None
+st.sidebar.markdown(
+    ui.storage_pill(storage.db_enabled(), _usage_mb, config.DB_SOFT_LIMIT_MB),
+    unsafe_allow_html=True)
 page = NAV[nav]
 
 if page == "guide":
