@@ -18,7 +18,8 @@ import streamlit as st  # noqa: E402
 from webapp import (cheatsheet, cjk, config, job_manager,  # noqa: E402
                     report_store, storage, ui)
 
-st.set_page_config(page_title="智析 · AI 股票分析助手", page_icon="📈", layout="wide")
+st.set_page_config(page_title="智析 · AI 股票分析助手", page_icon="📈", layout="wide",
+                   initial_sidebar_state="expanded")
 st.markdown(ui.CSS, unsafe_allow_html=True)
 try:
     storage.init()  # ensure dirs + (when DATABASE_URL is set) the runs table

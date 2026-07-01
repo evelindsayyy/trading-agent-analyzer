@@ -53,6 +53,10 @@ code, kbd, pre, .mono { font-family: 'IBM Plex Mono', monospace !important; }
 /* sidebar */
 [data-testid="stSidebar"] { background: #F4F2EA; border-right: 1px solid #E6E2D8; }
 [data-testid="stSidebar"] .block-container { padding-top: 1.4rem; }
+/* keep the "reopen sidebar" control reachable after the sidebar is collapsed */
+[data-testid="stSidebarCollapsedControl"] {
+  display: flex !important; visibility: visible !important; opacity: 1 !important;
+}
 
 /* sidebar radio → nav pills */
 [data-testid="stSidebar"] div[role="radiogroup"] { gap: 4px; display: flex; flex-direction: column; }

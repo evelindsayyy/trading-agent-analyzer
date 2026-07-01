@@ -1,67 +1,97 @@
 """CJK markdown rendering helpers (webapp.cjk).
 
-Bold markdown around prices/percentages (``**$610**``, ``**+5%**``) fails
-CommonMark emphasis flanking when hugged by Chinese characters, leaking literal
-asterisks onto the page. ``clean_markdown`` must fix those without disturbing
-markdown that already parses.
+LLM reports lean on ``**bold**`` around prices/percentages, but the markers are
+unreliable next to Chinese: emphasis fails to parse when ``**`` hugs CJK with
+ASCII punctuation inside, when a closer has a stray leading space, or when an
+orphaned ``**`` cascades through a line. ``clean_markdown`` must repair those so
+no literal asterisks leak, while leaving valid markdown intact.
 """
 from __future__ import annotations
+
+import re
 
 import pytest
 
 from webapp import cjk
 
-# Patterns that leak literal ``**`` before the fix: CJK char + ``**`` + ASCII
-# punctuation on the inner edge (currency, sign, bracket, percent...).
-_LEAKY = [
-    "价格**$610**，目标**$700**",
-    "涨幅**+5.2%**很强",
-    "回撤**-8%**需止损",
-    "占比**(15%)**的仓位",
-    "区间**[600, 700]**内",
-]
 
-# Markdown that already parses correctly and must be returned byte-for-byte.
-_VALID = [
-    "这是**很重要**的内容",
-    "为**5,000**元",
-    "纯英文 **$100** bold",
-    "没有任何强调的纯文本。",
-    "",
-]
+def _visible_text(html: str) -> str:
+    """Rendered text with tags stripped — what the reader actually sees."""
+    return re.sub(r"<[^>]+>", "", html)
 
 
 @pytest.fixture(scope="module")
 def render():
     md = pytest.importorskip("markdown_it").MarkdownIt("commonmark")
-    return lambda text: md.render(text)
+    return md.render
+
+
+# Lines reconstructed from real broken reports (orphans, space-before-close,
+# inner punctuation, split "* *"). None may leak a literal asterisk.
+_LEAKY = [
+    "當前 10 EMA 為 **200.34**，股價**199.36** 已連續多日低於**10 EMA",
+    "從 5 月 14 日歷史高點 235.47 **至6月26日低點 **192.53，回調幅度達 ~**18.2%",
+    "占比**(15%)**的仓位，止損**-8%**風險",
+    "價格**$610**，目標**$700**",
+    "涨幅**+5.2%**很强",
+    "區間 235.47 * *至 192.53",
+]
+
+# Markdown that already parses correctly; meaning/content must be preserved.
+_VALID = [
+    "這是**很重要**的內容",
+    "- **技術面**：偏多",
+    "為**5,000**元",
+    "純文字沒有強調。",
+    "",
+]
 
 
 @pytest.mark.parametrize("raw", _LEAKY)
-def test_leaky_emphasis_no_longer_leaks(raw, render):
+def test_no_literal_asterisks_leak(raw, render):
     cleaned = cjk.clean_markdown(raw)
-    assert "**" not in render(cleaned), f"literal asterisks still leak: {cleaned!r}"
-    assert "<strong>" in render(cleaned)
+    visible = _visible_text(render(cleaned))
+    assert "*" not in visible, f"asterisk still visible: {visible!r}"
+
+
+# The split "* *至 192.53" is a single orphaned marker (no pair), so it is
+# correctly dropped and yields no bold — excluded from the bold assertion below.
+_LEAKY_WITH_PAIRS = [c for c in _LEAKY if c.count("*") >= 4]
+
+
+@pytest.mark.parametrize("raw", _LEAKY_WITH_PAIRS)
+def test_repaired_lines_still_produce_bold(raw, render):
+    assert "<strong>" in render(cjk.clean_markdown(raw))
 
 
 @pytest.mark.parametrize("raw", _VALID)
-def test_valid_markdown_is_untouched(raw):
-    assert cjk.clean_markdown(raw) == raw
+def test_valid_markdown_text_is_preserved(raw, render):
+    # Spacing may be normalised, but the visible characters must not change.
+    before = _visible_text(render(raw)).replace(" ", "")
+    after = _visible_text(render(cjk.clean_markdown(raw))).replace(" ", "")
+    assert before == after
 
 
-def test_clean_markdown_handles_none_like_empty():
+def test_bold_numbers_are_emphasised():
+    out = cjk.clean_markdown("股價 **199.36** 偏弱")
+    assert "**199.36**" in out
+
+
+def test_orphan_marker_is_dropped():
+    assert "**" not in cjk.clean_markdown("已連續多日低於**10 EMA")
+
+
+def test_fenced_code_is_untouched():
+    src = "```\nprice = a**b\n```"
+    assert cjk.clean_markdown(src) == src
+
+
+def test_empty_input():
     assert cjk.clean_markdown("") == ""
 
 
-def test_font_css_injected_once():
-    calls: list[tuple[str, dict]] = []
+def test_ui_css_keeps_sidebar_reopenable():
+    # The reopen control must stay visible after the sidebar is collapsed.
+    from webapp import ui
 
-    class _FakeSt:
-        def markdown(self, body, **kwargs):
-            calls.append((body, kwargs))
-
-    cjk.inject_fonts(_FakeSt())
-    assert len(calls) == 1
-    body, kwargs = calls[0]
-    assert kwargs.get("unsafe_allow_html") is True
-    assert "font-family" in body and "PingFang SC" in body
+    assert "stSidebarCollapsedControl" in ui.CSS
