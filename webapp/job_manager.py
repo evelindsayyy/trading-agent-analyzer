@@ -17,6 +17,11 @@ def _now() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
+def _cheat_lang(output_language: str | None) -> str:
+    """Map a report's output language to the cheatsheet's 'zh'/'en' code."""
+    return "en" if str(output_language or "").strip().lower() in ("english", "en") else "zh"
+
+
 class JobManager:
     """Process-wide singleton: survives Streamlit reruns (module-level instance)."""
 
@@ -68,13 +73,31 @@ class JobManager:
             cfg["output_language"] = status.get("output_language") or config.OUTPUT_LANGUAGE
             cfg["max_debate_rounds"] = status["debate_rounds"]
             cfg["max_risk_discuss_rounds"] = status["risk_rounds"]
+            # Pin sampling low so repeated runs of the same ticker stay consistent.
+            cfg["temperature"] = config.TEMPERATURE
+            # Run the analysts concurrently (each in its own isolated subgraph).
+            cfg["parallel_analysts"] = config.PARALLEL_ANALYSTS
 
             analysts = tuple(status["analysts"]) or (
                 "market", "social", "news", "fundamentals")
             ta = TradingAgentsGraph(
                 selected_analysts=analysts, debug=False, config=cfg)
 
-            final_state, signal = ta.propagate(status["ticker"], status["date"])
+            # Stream each analyst section into storage as it finishes, so the
+            # report page can show it while the debate/risk stages still run.
+            # (DB backend: partial writes are overwritten by the full tree below;
+            # file backend: a no-op, since save_reports writes the tree at the end.)
+            sections: dict[str, str] = {}
+
+            def on_section(rel_path: str, content: str) -> None:
+                sections[rel_path] = content
+                try:
+                    storage.save_report_files(status["id"], dict(sections))
+                except Exception:  # noqa: BLE001 — streaming must never fail a run
+                    pass
+
+            final_state, signal = ta.propagate(
+                status["ticker"], status["date"], on_section=on_section)
 
             # Write the report tree to local disk (this is the file backend's
             # store, and a temp source we read into the DB backend).
@@ -93,6 +116,19 @@ class JobManager:
             status["signal"] = str(signal)
             status["finished_at"] = _now()
             storage.save_status(status)
+
+            # Pre-generate the cheatsheet in this same background thread so opening
+            # the report is instant (a cache hit) instead of triggering a fresh
+            # LLM call on the interactive path. Best-effort: never fail the run.
+            try:
+                from . import cheatsheet
+                from .report_store import Run
+
+                lang = _cheat_lang(status.get("output_language"))
+                run = Run(name=status["id"], ticker=status["ticker"], timestamp="")
+                cheatsheet.generate(run, lang=lang, save=True)
+            except Exception:  # noqa: BLE001 — cheatsheet is optional, run already done
+                pass
 
             # Keep the database under its soft cap: evict oldest runs if needed.
             try:

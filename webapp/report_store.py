@@ -28,18 +28,29 @@ class Run:
     ticker: str
     timestamp: str       # raw YYYYMMDD_HHMMSS part
     signal: str | None = None
+    status: str = "done"
+
+    @property
+    def is_done(self) -> bool:
+        return self.status == "done"
 
 
 def _to_run(rec: dict) -> Run:
     name = rec["id"]
     _, _, stamp = name.partition("_")
     return Run(name=name, ticker=rec.get("ticker", ""), timestamp=stamp,
-               signal=rec.get("signal"))
+               signal=rec.get("signal"), status=rec.get("status", "done"))
 
 
 def list_runs() -> list[Run]:
-    """Newest-first list of finished runs (those with a report)."""
-    return [_to_run(r) for r in storage.list_status() if r.get("status") == "done"]
+    """Newest-first list of runs viewable on the report page.
+
+    Includes finished runs and still-running ones — a running run may already
+    have some analyst sections streamed into storage, so opening it lets the
+    user read those sections before the whole pipeline completes.
+    """
+    return [_to_run(r) for r in storage.list_status()
+            if r.get("status") in ("done", "running")]
 
 
 def get_run(name: str) -> Run | None:

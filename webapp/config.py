@@ -43,6 +43,21 @@ LLM_PROVIDER = os.getenv("WEBAPP_LLM_PROVIDER", "deepseek")
 DEEP_MODEL = os.getenv("WEBAPP_DEEP_MODEL", "deepseek-v4-pro")    # flagship, for analysis
 QUICK_MODEL = os.getenv("WEBAPP_QUICK_MODEL", "deepseek-v4-flash")  # fast, for quick steps
 
+# Sampling temperature for the whole web app, pinned low by default. The CLI
+# leaves this unset (= the provider's own default, typically ~0.7-1.0), which
+# makes a genuinely balanced call flip between 加仓/减仓 across two runs of the
+# same ticker minutes apart. Pinning it low keeps repeated runs consistent.
+# Override with WEBAPP_TEMPERATURE (e.g. 0 for greedy, higher for more variety).
+TEMPERATURE = float(os.getenv("WEBAPP_TEMPERATURE", "0.3"))
+
+# Run the four analysts concurrently instead of one-after-another. Each analyst
+# is an isolated subgraph with its own tool/message loop, so they never share
+# state — only the finished report strings are merged before the debate stage.
+# This is the biggest report-latency win. Set WEBAPP_PARALLEL_ANALYSTS=0 to
+# fall back to the original sequential pipeline.
+PARALLEL_ANALYSTS = os.getenv("WEBAPP_PARALLEL_ANALYSTS", "1").strip().lower() not in (
+    "0", "false", "no", "")
+
 # Cheatsheet generation. Defaults to DeepSeek's fast model (cheap + same API as
 # the rest of the site). Falls back to the TradingAgents-configured provider
 # automatically if the chosen provider's key is missing (see cheatsheet.py).

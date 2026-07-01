@@ -22,7 +22,7 @@ from tradingagents.agents import (
 )
 from tradingagents.agents.utils.agent_states import AgentState
 
-from .analyst_execution import build_analyst_execution_plan
+from .analyst_execution import ANALYST_NODE_SPECS, build_analyst_execution_plan
 from .conditional_logic import ConditionalLogic
 
 
@@ -55,25 +55,7 @@ class GraphSetup:
                 - "fundamentals": Fundamentals analyst
         """
         plan = build_analyst_execution_plan(selected_analysts)
-
-        analyst_factories = {
-            "market": lambda: create_market_analyst(self.quick_thinking_llm),
-            "social": lambda: create_sentiment_analyst(self.quick_thinking_llm),
-            "news": lambda: create_news_analyst(self.quick_thinking_llm),
-            "fundamentals": lambda: create_fundamentals_analyst(self.quick_thinking_llm),
-        }
-
-        # Create researcher and manager nodes
-        bull_researcher_node = create_bull_researcher(self.quick_thinking_llm)
-        bear_researcher_node = create_bear_researcher(self.quick_thinking_llm)
-        research_manager_node = create_research_manager(self.deep_thinking_llm)
-        trader_node = create_trader(self.quick_thinking_llm)
-
-        # Create risk analysis nodes
-        aggressive_analyst = create_aggressive_debator(self.quick_thinking_llm)
-        neutral_analyst = create_neutral_debator(self.quick_thinking_llm)
-        conservative_analyst = create_conservative_debator(self.quick_thinking_llm)
-        portfolio_manager_node = create_portfolio_manager(self.deep_thinking_llm)
+        analyst_factories = self._analyst_factories()
 
         # Create workflow
         workflow = StateGraph(AgentState)
@@ -84,15 +66,8 @@ class GraphSetup:
             workflow.add_node(spec.clear_node, create_msg_delete())
             workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
 
-        # Add other nodes
-        workflow.add_node("Bull Researcher", bull_researcher_node)
-        workflow.add_node("Bear Researcher", bear_researcher_node)
-        workflow.add_node("Research Manager", research_manager_node)
-        workflow.add_node("Trader", trader_node)
-        workflow.add_node("Aggressive Analyst", aggressive_analyst)
-        workflow.add_node("Neutral Analyst", neutral_analyst)
-        workflow.add_node("Conservative Analyst", conservative_analyst)
-        workflow.add_node("Portfolio Manager", portfolio_manager_node)
+        # Add the post-analyst pipeline (researchers → trader → risk → PM).
+        self._add_downstream_nodes(workflow)
 
         # Define edges
         # Start with the first analyst
@@ -100,25 +75,50 @@ class GraphSetup:
 
         # Connect analysts in sequence
         for i, spec in enumerate(plan.specs):
-            current_analyst = spec.agent_node
-            current_tools = spec.tool_node
-            current_clear = spec.clear_node
-
-            # Add conditional edges for current analyst
-            workflow.add_conditional_edges(
-                current_analyst,
-                getattr(self.conditional_logic, f"should_continue_{spec.key}"),
-                [current_tools, current_clear],
-            )
-            workflow.add_edge(current_tools, current_analyst)
+            self._wire_analyst_loop(workflow, spec)
 
             # Connect to next analyst or to Bull Researcher if this is the last analyst
             if i < len(plan.specs) - 1:
-                workflow.add_edge(current_clear, plan.specs[i + 1].agent_node)
+                workflow.add_edge(spec.clear_node, plan.specs[i + 1].agent_node)
             else:
-                workflow.add_edge(current_clear, "Bull Researcher")
+                workflow.add_edge(spec.clear_node, "Bull Researcher")
 
         # Add remaining edges
+        self._add_downstream_edges(workflow)
+
+        return workflow
+
+    def _analyst_factories(self) -> dict:
+        """Factories that build a fresh analyst node bound to the quick LLM."""
+        return {
+            "market": lambda: create_market_analyst(self.quick_thinking_llm),
+            "social": lambda: create_sentiment_analyst(self.quick_thinking_llm),
+            "news": lambda: create_news_analyst(self.quick_thinking_llm),
+            "fundamentals": lambda: create_fundamentals_analyst(self.quick_thinking_llm),
+        }
+
+    def _wire_analyst_loop(self, workflow, spec) -> None:
+        """Wire one analyst's tool-calling loop: analyst → (tools → analyst)* → clear."""
+        workflow.add_conditional_edges(
+            spec.agent_node,
+            getattr(self.conditional_logic, f"should_continue_{spec.key}"),
+            [spec.tool_node, spec.clear_node],
+        )
+        workflow.add_edge(spec.tool_node, spec.agent_node)
+
+    def _add_downstream_nodes(self, workflow) -> None:
+        """Add the researcher/trader/risk/PM nodes shared by every entry path."""
+        workflow.add_node("Bull Researcher", create_bull_researcher(self.quick_thinking_llm))
+        workflow.add_node("Bear Researcher", create_bear_researcher(self.quick_thinking_llm))
+        workflow.add_node("Research Manager", create_research_manager(self.deep_thinking_llm))
+        workflow.add_node("Trader", create_trader(self.quick_thinking_llm))
+        workflow.add_node("Aggressive Analyst", create_aggressive_debator(self.quick_thinking_llm))
+        workflow.add_node("Neutral Analyst", create_neutral_debator(self.quick_thinking_llm))
+        workflow.add_node("Conservative Analyst", create_conservative_debator(self.quick_thinking_llm))
+        workflow.add_node("Portfolio Manager", create_portfolio_manager(self.deep_thinking_llm))
+
+    def _add_downstream_edges(self, workflow) -> None:
+        """Add the debate/risk conditional edges shared by every entry path."""
         workflow.add_conditional_edges(
             "Bull Researcher",
             self.conditional_logic.should_continue_debate,
@@ -161,7 +161,39 @@ class GraphSetup:
                 "Portfolio Manager": "Portfolio Manager",
             },
         )
-
         workflow.add_edge("Portfolio Manager", END)
 
+    def setup_analyst_subgraph(self, analyst_key: str):
+        """Compile a standalone graph for ONE analyst: agent + tool loop + clear.
+
+        Used by the parallel execution path. Each analyst runs in its own thread
+        on its own state, so the shared ``messages`` channel never interleaves
+        across analysts. Flow: ``START → agent → (tools → agent)* → clear → END``.
+        The analyst writes its ``*_report`` field, which the caller merges into
+        the downstream graph's state.
+        """
+        spec = ANALYST_NODE_SPECS[analyst_key]
+        factories = self._analyst_factories()
+
+        workflow = StateGraph(AgentState)
+        workflow.add_node(spec.agent_node, factories[spec.key]())
+        workflow.add_node(spec.clear_node, create_msg_delete())
+        workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
+
+        workflow.add_edge(START, spec.agent_node)
+        self._wire_analyst_loop(workflow, spec)
+        workflow.add_edge(spec.clear_node, END)
+        return workflow
+
+    def setup_downstream_graph(self):
+        """Compile the post-analyst pipeline as a standalone graph.
+
+        Entry is the Bull Researcher; the four ``*_report`` fields must already
+        be populated in the initial state (the parallel path fills them from the
+        analyst subgraphs before invoking this).
+        """
+        workflow = StateGraph(AgentState)
+        self._add_downstream_nodes(workflow)
+        workflow.add_edge(START, "Bull Researcher")
+        self._add_downstream_edges(workflow)
         return workflow

@@ -87,12 +87,8 @@ def _holdings_line(shares: str, cost: str, lang: str) -> str:
     return msg
 
 
-def generate(run: Run, lang: str = "zh", shares: str = "", cost: str = "",
-             save: bool = True) -> str:
-    """Generate (and optionally save) the beginner cheatsheet markdown."""
-    from tradingagents.llm_clients import create_llm_client
-    from tradingagents.llm_clients.base_client import normalize_content
-
+def _build_prompts(run: Run, lang: str, shares: str, cost: str) -> tuple[str, str]:
+    """Assemble the (system, user) prompt pair for a cheatsheet request."""
     system_prompt = _skill_body(lang)
     report_text = _gather_report_text(run)
     holdings = _holdings_line(shares, cost, lang)
@@ -114,11 +110,25 @@ def generate(run: Run, lang: str = "zh", shares: str = "", cost: str = "",
             f"[Holdings] {holdings}\n\n"
             f"[Report content]\n{report_text}"
         )
+    return system_prompt, user_prompt
+
+
+def _make_llm():
+    """Build the chat model for cheatsheet generation (temperature-pinned)."""
+    from tradingagents.llm_clients import create_llm_client
 
     provider, model = _resolve_provider()
-    client = create_llm_client(provider, model)
-    llm = client.get_llm()  # the underlying LangChain chat model exposes .invoke
-    response = llm.invoke([
+    client = create_llm_client(provider, model, temperature=config.TEMPERATURE)
+    return client.get_llm()  # the underlying LangChain chat model
+
+
+def generate(run: Run, lang: str = "zh", shares: str = "", cost: str = "",
+             save: bool = True) -> str:
+    """Generate (and optionally save) the beginner cheatsheet markdown."""
+    from tradingagents.llm_clients.base_client import normalize_content
+
+    system_prompt, user_prompt = _build_prompts(run, lang, shares, cost)
+    response = _make_llm().invoke([
         ("system", system_prompt),
         ("human", user_prompt),
     ])
@@ -128,3 +138,23 @@ def generate(run: Run, lang: str = "zh", shares: str = "", cost: str = "",
         storage.save_cheatsheet(run.name, lang, markdown)
 
     return markdown
+
+
+def stream(run: Run, lang: str = "zh", shares: str = "", cost: str = ""):
+    """Yield cheatsheet markdown chunks as the model produces them.
+
+    Built for Streamlit's ``st.write_stream`` so the user sees text appear
+    immediately instead of waiting on a spinner. This does NOT persist — the
+    caller saves the full string ``st.write_stream`` returns via
+    ``storage.save_cheatsheet``.
+    """
+    from tradingagents.llm_clients.base_client import normalize_content
+
+    system_prompt, user_prompt = _build_prompts(run, lang, shares, cost)
+    for chunk in _make_llm().stream([
+        ("system", system_prompt),
+        ("human", user_prompt),
+    ]):
+        text = normalize_content(chunk).content
+        if text:
+            yield text

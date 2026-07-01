@@ -125,9 +125,19 @@ class TradingAgentsGraph:
         self.log_states_dict = {}  # date to full state dict
 
         # Set up the graph: keep the workflow for recompilation with a checkpointer.
+        self.selected_analysts = tuple(selected_analysts)
         self.workflow = self.graph_setup.setup_graph(selected_analysts)
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
+
+        # Optional parallel path: run each analyst as an isolated subgraph in its
+        # own thread, then run the shared downstream (debate → PM) pipeline once
+        # their reports are merged. Compiled lazily on first use. Checkpointing
+        # targets the monolithic graph, so the two features are mutually
+        # exclusive — parallel mode is skipped when checkpointing is on.
+        self.parallel_analysts = bool(self.config.get("parallel_analysts"))
+        self._analyst_subgraphs: dict[str, Any] | None = None
+        self._downstream_graph: Any | None = None
 
     def _get_provider_kwargs(self) -> dict[str, Any]:
         """Get provider-specific kwargs for LLM client creation."""
@@ -318,7 +328,18 @@ class TradingAgentsGraph:
         identity = resolve_instrument_identity(ticker)
         return build_instrument_context(ticker, asset_type, identity)
 
-    def propagate(self, company_name, trade_date, asset_type: str = "stock"):
+    def _build_parallel_graphs(self) -> None:
+        """Compile the per-analyst subgraphs + shared downstream graph (once)."""
+        if self._analyst_subgraphs is not None:
+            return
+        self._analyst_subgraphs = {
+            key: self.graph_setup.setup_analyst_subgraph(key).compile()
+            for key in self.selected_analysts
+        }
+        self._downstream_graph = self.graph_setup.setup_downstream_graph().compile()
+
+    def propagate(self, company_name, trade_date, asset_type: str = "stock",
+                  on_section=None):
         """Run the trading agents graph for a company on a specific date.
 
         ``asset_type`` selects between the stock pipeline (default) and the
@@ -327,6 +348,10 @@ class TradingAgentsGraph:
         ``checkpoint_enabled`` is set in config, the graph is recompiled with
         a per-ticker SqliteSaver so a crashed run can resume from the last
         successful node on a subsequent invocation with the same ticker+date.
+
+        ``on_section(rel_path, content)`` is an optional callback fired as each
+        analyst report becomes available (parallel mode only), so a caller can
+        stream finished sections to a UI before the whole run completes.
         """
         self.ticker = company_name
 
@@ -352,7 +377,8 @@ class TradingAgentsGraph:
                 logger.info("Starting fresh for %s on %s", company_name, trade_date)
 
         try:
-            return self._run_graph(company_name, trade_date, asset_type=asset_type)
+            return self._run_graph(company_name, trade_date, asset_type=asset_type,
+                                   on_section=on_section)
         finally:
             if self._checkpointer_ctx is not None:
                 self._checkpointer_ctx.__exit__(None, None, None)
@@ -374,7 +400,63 @@ class TradingAgentsGraph:
             )
         return write_report_tree(final_state, ticker, save_path)
 
-    def _run_graph(self, company_name, trade_date, asset_type: str = "stock"):
+    # Analyst wire-key → the AgentState field it fills → the report-tree path
+    # a caller streams it to. Kept here so parallel execution and section
+    # streaming share one mapping.
+    _ANALYST_REPORT_KEY = {
+        "market": "market_report",
+        "social": "sentiment_report",
+        "news": "news_report",
+        "fundamentals": "fundamentals_report",
+    }
+    _REPORT_KEY_PATH = {
+        "market_report": "1_analysts/market.md",
+        "sentiment_report": "1_analysts/sentiment.md",
+        "news_report": "1_analysts/news.md",
+        "fundamentals_report": "1_analysts/fundamentals.md",
+    }
+
+    def _run_parallel(self, init_agent_state, args, on_section=None):
+        """Run the selected analysts concurrently, then the downstream pipeline.
+
+        Each analyst subgraph executes in its own worker thread on its own copy
+        of the initial state, so their tool-calling message loops never
+        interleave on the shared ``messages`` channel. Only the ``*_report``
+        string each produces is merged into a single state, which is then run
+        through the shared downstream (debate → trader → risk → PM) graph.
+        """
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        self._build_parallel_graphs()
+
+        def _run_one(key: str):
+            # A fresh state copy (with its own messages list) isolates the
+            # analyst's tool loop from the others running concurrently.
+            sub_state = dict(init_agent_state)
+            sub_state["messages"] = list(init_agent_state["messages"])
+            result = self._analyst_subgraphs[key].invoke(sub_state, **args)
+            report_key = self._ANALYST_REPORT_KEY[key]
+            return report_key, result.get(report_key, "")
+
+        merged = dict(init_agent_state)
+        with ThreadPoolExecutor(max_workers=len(self.selected_analysts)) as pool:
+            futures = {pool.submit(_run_one, k): k for k in self.selected_analysts}
+            for fut in as_completed(futures):
+                report_key, content = fut.result()
+                merged[report_key] = content
+                if on_section and content:
+                    try:
+                        on_section(self._REPORT_KEY_PATH.get(report_key, report_key), content)
+                    except Exception:  # noqa: BLE001 — streaming must never fail a run
+                        logger.warning("on_section callback failed for %s", report_key)
+
+        # The analysts cleared their own messages; give the downstream pipeline a
+        # clean human seed (it reads the merged reports, not the analyst loops).
+        merged["messages"] = list(init_agent_state["messages"])
+        return self._downstream_graph.invoke(merged, **args)
+
+    def _run_graph(self, company_name, trade_date, asset_type: str = "stock",
+                   on_section=None):
         """Execute the graph and write the resulting state to disk and memory log."""
         # Initialize state — inject memory log context for PM and the
         # deterministically resolved instrument identity for all agents.
@@ -413,6 +495,10 @@ class TradingAgentsGraph:
             final_state = {}
             for chunk in trace:
                 final_state.update(chunk)
+        elif (self.parallel_analysts and len(self.selected_analysts) > 1
+              and not self.config.get("checkpoint_enabled")):
+            # Concurrent analysts + shared downstream pipeline (see _run_parallel).
+            final_state = self._run_parallel(init_agent_state, args, on_section=on_section)
         else:
             final_state = self.graph.invoke(init_agent_state, **args)
 

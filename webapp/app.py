@@ -185,19 +185,40 @@ def page_report() -> None:
     st.markdown(ui.summary_card_html(run.ticker, _run_label(run).split("· ")[-1],
                                      rating, is_buy), unsafe_allow_html=True)
 
+    # A still-running run streams its analyst sections in as they finish — poll
+    # every few seconds so they appear without a manual refresh, and flip to the
+    # full report + cheatsheet view once the pipeline completes.
+    if not run.is_done:
+        st.info("⏳ 分析进行中，各章节会陆续出现。完整报告与速查表将在完成后就绪。")
+
+        @st.fragment(run_every=4)
+        def _live_sections() -> None:
+            fresh = report_store.get_run(run.name)
+            if fresh is not None and fresh.is_done:
+                st.rerun()  # full rerun → render the finished report + cheatsheet
+                return
+            _render_sections(run)
+
+        _live_sections()
+        return
+
     tab_report, tab_cheat = st.tabs(["完整报告", "新手速查表 · 推荐"])
     with tab_report:
-        sections = report_store.available_sections(run)
-        if not sections:
-            st.info("该报告暂无可显示的章节。")
-        else:
-            labels = [label for _, label, _ in sections]
-            picked = st.radio("章节", labels, horizontal=True, label_visibility="collapsed")
-            for _, label, content in sections:
-                if label == picked:
-                    st.markdown(cjk.clean_markdown(content))
+        _render_sections(run)
     with tab_cheat:
         _cheatsheet_ui(run)
+
+
+def _render_sections(run: report_store.Run) -> None:
+    sections = report_store.available_sections(run)
+    if not sections:
+        st.info("该报告暂无可显示的章节。" if run.is_done else "正在生成第一批章节…")
+        return
+    labels = [label for _, label, _ in sections]
+    picked = st.radio("章节", labels, horizontal=True, label_visibility="collapsed")
+    for _, label, content in sections:
+        if label == picked:
+            st.markdown(cjk.clean_markdown(content))
 
 
 def _cheatsheet_ui(run: report_store.Run) -> None:
@@ -210,13 +231,18 @@ def _cheatsheet_ui(run: report_store.Run) -> None:
     existing = report_store.existing_cheatsheet(run, lang)
     btn_label = "重新生成速查表" if existing else "生成速查表"
     if st.button(f"🎯 {btn_label}", type="primary"):
-        with st.spinner("正在生成速查表…"):
-            try:
-                md = cheatsheet.generate(run, lang=lang, shares=shares, cost=cost)
-                st.session_state[f"cheat_{run.name}_{lang}"] = md
-            except Exception as exc:  # noqa: BLE001
-                st.error(f"生成失败：{exc}")
-                return
+        try:
+            # Stream tokens straight into the page instead of blocking on a
+            # spinner; st.write_stream returns the full text once complete.
+            md = st.write_stream(
+                cheatsheet.stream(run, lang=lang, shares=shares, cost=cost))
+        except Exception as exc:  # noqa: BLE001
+            st.error(f"生成失败：{exc}")
+            return
+        storage.save_cheatsheet(run.name, lang, (md or "").strip())
+        st.session_state[f"cheat_{run.name}_{lang}"] = md
+        # Rerun so the polished, CJK-cleaned cached copy replaces the raw stream.
+        st.rerun()
 
     md = st.session_state.get(f"cheat_{run.name}_{lang}") or existing
     if md:
