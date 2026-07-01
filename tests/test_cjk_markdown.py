@@ -90,16 +90,8 @@ def test_empty_input():
     assert cjk.clean_markdown("") == ""
 
 
-def test_font_css_injected_once_with_sidebar_fix():
-    calls: list[tuple[str, dict]] = []
+def test_ui_css_keeps_sidebar_reopenable():
+    # The reopen control must stay visible after the sidebar is collapsed.
+    from webapp import ui
 
-    class _FakeSt:
-        def markdown(self, body, **kwargs):
-            calls.append((body, kwargs))
-
-    cjk.inject_fonts(_FakeSt())
-    assert len(calls) == 1
-    body, kwargs = calls[0]
-    assert kwargs.get("unsafe_allow_html") is True
-    assert "PingFang SC" in body
-    assert "stSidebarCollapsedControl" in body  # sidebar stays reopenable
+    assert "stSidebarCollapsedControl" in ui.CSS

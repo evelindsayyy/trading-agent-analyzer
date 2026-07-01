@@ -1,8 +1,12 @@
 # Streamlit app config (committed). Secrets go in .streamlit/secrets.toml (ignored).
+# Palette from the 智析 design: warm cream + deep teal.
 [theme]
 base = "light"
-primaryColor = "#e8503a"
+primaryColor = "#1C6E66"
+backgroundColor = "#FBFAF6"
+secondaryBackgroundColor = "#F4F2EA"
+textColor = "#23211C"
+font = "sans serif"
 
 [server]
-# Larger uploads aren't needed; keep the app lean.
 maxUploadSize = 5
