@@ -53,9 +53,24 @@ code, kbd, pre, .mono { font-family: 'IBM Plex Mono', monospace !important; }
 /* sidebar */
 [data-testid="stSidebar"] { background: #F4F2EA; border-right: 1px solid #E6E2D8; }
 [data-testid="stSidebar"] .block-container { padding-top: 1.4rem; }
-/* keep the "reopen sidebar" control reachable after the sidebar is collapsed */
+/* keep the "reopen sidebar" control reachable — and obvious — after collapse.
+   Streamlit's default chevron is a faint low-contrast glyph that's easy to miss,
+   so render it as a clear white pill with a brand-teal chevron. */
 [data-testid="stSidebarCollapsedControl"] {
   display: flex !important; visibility: visible !important; opacity: 1 !important;
+}
+[data-testid="stSidebarCollapsedControl"] button {
+  background: #FFFFFF !important; border: 1px solid #E6E2D8 !important;
+  border-radius: 9px !important; color: #1C6E66 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .08) !important;
+  width: 38px !important; height: 38px !important;
+}
+[data-testid="stSidebarCollapsedControl"] button:hover {
+  background: #E6F0EE !important; border-color: #1C6E66 !important;
+}
+[data-testid="stSidebarCollapsedControl"] svg {
+  color: #1C6E66 !important; fill: #1C6E66 !important;
+  width: 20px !important; height: 20px !important;
 }
 
 /* sidebar radio → nav pills */
