@@ -1,9 +1,29 @@
 # Trading Agent Analyzer
 
-A self-contained bundle of the **TradingAgents** multi-agent analysis engine plus
-a **Streamlit web UI** on top of it — so you can generate analyses, browse the
-full report tree, and produce a beginner-friendly cheatsheet from the browser,
-without touching the terminal. Runs on the **DeepSeek** API by default.
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
+![LLM](https://img.shields.io/badge/LLM-DeepSeek-4D6BFE)
+![UI](https://img.shields.io/badge/UI-Streamlit-FF4B4B?logo=streamlit&logoColor=white)
+
+**Paste a stock ticker into a browser and get a full multi-agent trading analysis.**
+A team of LLM analyst, researcher, trader, and risk-management agents debate the
+market data and hand back a reasoned buy/sell/hold decision — plus a
+beginner-friendly cheatsheet — with no terminal required. Runs on the **DeepSeek**
+API by default.
+
+The multi-agent **engine** is a locally-modified copy of the open-source
+[TradingAgents](https://github.com/TauricResearch/TradingAgents) project
+(Apache-2.0; see **[Attribution & license](#attribution--license)**). The
+**original work in this repo** is everything that turns that engine into a usable
+web product: the Streamlit app (`webapp/`), its background job runner, durable
+Postgres storage, the beginner-cheatsheet generator, and the integration wiring
+them together.
+
+<p align="center">
+  <img src="assets/schema.png" width="900"
+       alt="TradingAgents engine architecture: market, social-media, news, and fundamentals data feed a researcher team that debates a bullish vs. bearish case, then a trader and a risk-management team, culminating in a final trade decision.">
+</p>
+<p align="center"><sub>Multi-agent engine architecture (from the upstream TradingAgents project).</sub></p>
 
 This repo contains both pieces, so it clones and runs on its own:
 
@@ -12,6 +32,20 @@ This repo contains both pieces, so it clones and runs on its own:
   **Attribution** below).
 - `webapp/` — the Streamlit frontend.
 - `prompts/` — the cheatsheet skill prompts the web app uses.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Multi-agent engine | **TradingAgents**, orchestrated with **LangGraph** + **LangChain** |
+| LLM provider (default) | **DeepSeek** |
+| Other providers | OpenAI, Google Gemini, Anthropic Claude, xAI, Qwen, GLM, Groq, Azure OpenAI, AWS Bedrock, Ollama, or any OpenAI-compatible endpoint |
+| Web UI | **Streamlit** (`webapp/`) |
+| Background jobs | Python `ThreadPoolExecutor` runner with atomic JSON status (`webapp/job_manager.py`) |
+| Storage | Local markdown files by default; **Postgres** via SQLAlchemy + psycopg2 when `DATABASE_URL` is set (SQLite for tests) |
+| Market data | Alpha Vantage, Yahoo Finance, FRED, Reddit, Stocktwits, Polymarket, stockstats |
+| Packaging & deploy | `pyproject.toml` (setuptools), **uv** lockfile, **Docker** + docker-compose |
+| Language | Python 3.10+ |
 
 ## Quickstart
 
@@ -34,6 +68,12 @@ Open http://localhost:8501.
 > Prefer the terminal? The original CLI still works: `tradingagents` (or
 > `python main.py`). See **[README.tradingagents.md](README.tradingagents.md)**
 > for the engine's own documentation.
+
+<p align="center">
+  <img src="assets/cli/cli_transaction.png" width="820"
+       alt="TradingAgents CLI dashboard: a progress panel tracking each analyst, research, trading, and risk-management agent to completion, a live reasoning feed, and the final portfolio-management decision report.">
+</p>
+<p align="center"><sub>The engine running in the terminal — the web app drives this same multi-agent pipeline.</sub></p>
 
 ## The web app
 
