@@ -1,5 +1,7 @@
 # Trading Agent Analyzer
 
+[![CI](https://github.com/evelindsayyy/trading-agent-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/evelindsayyy/trading-agent-analyzer/actions/workflows/ci.yml)
+[![live demo](https://img.shields.io/badge/demo-live-brightgreen)](https://trading-agent-analyzer-jvfbfxva4vb8wv7xmbtdwl.streamlit.app/)
 ![License](https://img.shields.io/badge/license-Apache%202.0-blue)
 ![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![LLM](https://img.shields.io/badge/LLM-DeepSeek-4D6BFE)
@@ -10,6 +12,8 @@ A team of LLM analyst, researcher, trader, and risk-management agents debate the
 market data and hand back a reasoned buy/sell/hold decision — plus a
 beginner-friendly cheatsheet — with no terminal required. Runs on the **DeepSeek**
 API by default.
+
+**[Live demo →](https://trading-agent-analyzer-jvfbfxva4vb8wv7xmbtdwl.streamlit.app/)** _(free tier — may take a couple of minutes to wake after a quiet spell)_
 
 The multi-agent **engine** is a locally-modified copy of the open-source
 [TradingAgents](https://github.com/TauricResearch/TradingAgents) project
