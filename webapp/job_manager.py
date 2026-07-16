@@ -7,6 +7,7 @@ threads never touch Streamlit APIs.
 """
 from __future__ import annotations
 
+import contextlib
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 
@@ -91,10 +92,9 @@ class JobManager:
 
             def on_section(rel_path: str, content: str) -> None:
                 sections[rel_path] = content
-                try:
+                # Streaming must never fail a run — swallow storage hiccups.
+                with contextlib.suppress(Exception):
                     storage.save_report_files(status["id"], dict(sections))
-                except Exception:  # noqa: BLE001 — streaming must never fail a run
-                    pass
 
             final_state, signal = ta.propagate(
                 status["ticker"], status["date"], on_section=on_section)
