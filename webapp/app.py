@@ -29,29 +29,32 @@ except Exception as exc:  # noqa: BLE001 — friendly message, not a stack trace
 
 
 # --------------------------------------------------------------------------- #
-# Auth gate
+# Auth gate — read-only demo mode
+#
+# Browsing (guide, run history, finished reports) is open to everyone; only
+# the actions that spend LLM money — launching a new analysis and generating a
+# cheatsheet — require the access code. No APP_PASSWORD configured = fully
+# open (localhost/dev).
 # --------------------------------------------------------------------------- #
-def check_password() -> bool:
-    if not config.APP_PASSWORD or st.session_state.get("authed"):
+def is_unlocked() -> bool:
+    return not config.APP_PASSWORD or bool(st.session_state.get("authed"))
+
+
+def unlock_gate(key: str) -> bool:
+    """Inline access-code prompt. Returns True once unlocked."""
+    if is_unlocked():
         return True
-    st.markdown(ui.brand_header(), unsafe_allow_html=True)
-    st.title("欢迎使用")
-    st.caption("请输入访问口令进入（向分享给你的人索取）。")
-    pw = st.text_input("访问口令", type="password", label_visibility="collapsed",
-                       placeholder="访问口令")
-    if st.button("进入", type="primary"):
+    st.info("🔒 这是只读演示：浏览「分析记录」和「报告」无需口令。"
+            "发起新分析 / 生成速查表会产生真实的 LLM 调用费用，需输入访问口令（可向作者索取）。")
+    pw = st.text_input("访问口令", type="password", key=f"pw_{key}",
+                       label_visibility="collapsed", placeholder="访问口令")
+    if st.button("解锁", type="primary", key=f"unlock_{key}"):
         if pw == config.APP_PASSWORD:
             st.session_state["authed"] = True
             st.rerun()
         else:
             st.error("口令错误，请重试。")
-    st.divider()
-    st.caption(config.DISCLAIMER)
     return False
-
-
-if not check_password():
-    st.stop()
 
 
 # --------------------------------------------------------------------------- #
@@ -69,6 +72,8 @@ def page_new_analysis() -> None:
     st.markdown("<h1 style='font-family:\"Noto Serif SC\",serif;'>新建分析</h1>",
                 unsafe_allow_html=True)
     st.caption("输入股票代码 → 点「开始分析」。分析需要几分钟，提交后到「分析记录」看进度。")
+    if not unlock_gate("new_analysis"):
+        return
 
     c1, c2, c3 = st.columns([1.3, 1, 1])
     with c1:
@@ -230,7 +235,11 @@ def _cheatsheet_ui(run: report_store.Run) -> None:
 
     existing = report_store.existing_cheatsheet(run, lang)
     btn_label = "重新生成速查表" if existing else "生成速查表"
-    if st.button(f"🎯 {btn_label}", type="primary"):
+    if not is_unlocked():
+        # Generating calls the LLM (costs money) — locked in demo mode, but an
+        # already-generated cheatsheet below stays viewable/downloadable.
+        unlock_gate(f"cheatsheet_{run.name}_{lang}")
+    elif st.button(f"🎯 {btn_label}", type="primary"):
         try:
             # Stream tokens straight into the page instead of blocking on a
             # spinner; st.write_stream returns the full text once complete.

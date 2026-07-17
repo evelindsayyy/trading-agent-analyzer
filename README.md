@@ -15,6 +15,12 @@ API by default.
 
 **[Live demo →](https://trading-agent-analyzer-jvfbfxva4vb8wv7xmbtdwl.streamlit.app/)** _(free tier — may take a couple of minutes to wake after a quiet spell)_
 
+> The live demo is **read-only**: browse the run history and full analysis
+> reports freely. Launching a *new* analysis or generating a cheatsheet makes
+> real (paid) LLM calls, so those actions need an access code — available on
+> request. To run it unrestricted, [clone and run locally](#quick-start) with
+> your own API key.
+
 The multi-agent **engine** is a locally-modified copy of the open-source
 [TradingAgents](https://github.com/TauricResearch/TradingAgents) project
 (Apache-2.0; see **[Attribution & license](#attribution--license)**). The
@@ -120,7 +126,7 @@ Python/Streamlit server. The easiest real host is **Streamlit Community Cloud**:
    - **Secrets**: paste (see `.streamlit/secrets.toml.example`):
      ```toml
      DEEPSEEK_API_KEY = "sk-..."
-     WEBAPP_PASSWORD   = "choose-a-passphrase"   # recommended: the app is public
+     WEBAPP_PASSWORD   = "choose-a-passphrase"   # required for a public URL, see below
      ```
 5. **Deploy**. First build takes a few minutes (it installs the engine + deps).
 
@@ -133,8 +139,11 @@ The app reads those secrets as environment variables (bridged in
 - Disk is **ephemeral** — generated reports under `reports/` are lost on
   restart/redeploy. (Add object storage / a DB for persistence.)
 - TradingAgents runs are **multi-minute and use paid DeepSeek calls**; the
-  free tier's ~1 GB RAM can be tight. Set `WEBAPP_PASSWORD` so it isn't open to
-  the world running up your DeepSeek bill.
+  free tier's ~1 GB RAM can be tight. **Set `WEBAPP_PASSWORD`** — with it set,
+  the app runs in read-only demo mode: anyone can browse run history and
+  reports, but launching a new analysis or generating a cheatsheet (the two
+  actions that spend DeepSeek money) requires the passphrase. Leaving it unset
+  leaves the app fully open — only do that locally.
 
 For always-on hosting with real disk, use Render / Railway / Fly.io or a VPS
 (`streamlit run webapp/app.py` behind a reverse proxy) — same secrets.
